@@ -1,0 +1,5 @@
+#fbfafa // white
+#c18dcc // light purple
+#8c95c3 // light blue
+#7546a1 // dark purple
+#373e64 // dark blue

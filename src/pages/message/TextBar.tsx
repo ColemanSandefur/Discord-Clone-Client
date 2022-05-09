@@ -32,8 +32,11 @@ export function TextBar(data: {onSubmit?: (text: string) => void}) {
     
     if (!isMobile && event.key == "Enter" && !event.shiftKey) {
       if (data.onSubmit) {
-        data.onSubmit(event.currentTarget.textContent + "");
+        console.log("value: \"", event.currentTarget.value, "\"");
+        data.onSubmit(event.currentTarget.value + "");
       }
+      event.currentTarget.value = "";
+      updateHeight(event.currentTarget);
       event.preventDefault();
     }
   }
@@ -48,13 +51,13 @@ export function TextBar(data: {onSubmit?: (text: string) => void}) {
     return () => {
     };
   }, []);
-  
+
   return (
     <div className="MessageBar" >
       <div className="Bar">
-        <BarButton image={plusIcon} onClick={() => {}}></BarButton>
+        <BarButton image={plusIcon} onClick={() => {}} />
         <textarea ref={textArea} id="" name="" rows={1} onKeyUp={onKeyUp} onKeyDown={onKeyDown}></textarea>
-        <BarButton image={smileIcon}></BarButton>
+        <BarButton image={smileIcon} />
       </div>
     </div>
   )

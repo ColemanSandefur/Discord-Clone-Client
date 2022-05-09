@@ -16,7 +16,7 @@ $channel-width: 3rem;
 }
 
 .SideBar {
-    min-width: $side-bar-width;
+    width: $side-bar-width;
     min-height: 100%;
     //background-color: #e5c90e;
     //background-color: #ffef00;
@@ -52,21 +52,23 @@ $channel-width: 3rem;
     background-color: white;
     margin: 0.25rem;
     padding: 0;
-    transition: 0.15s ease-in-out;
+    transition: 0.25s ease-in-out;
     flex: none;
 
     background-size: cover;
     background-repeat: no-repeat;
     background-position: center;
+
     &.CreateChannel {
         background-size: 50%;
     }
 
-    &:hover, &.Selected {
+    &:hover {
         border-radius:1rem;
     }
 
     &.Selected {
+        border-radius: 1rem; 
         animation: grow;
         animation-duration: 0.3s;
         animation-iteration-count: 1;
@@ -96,7 +98,7 @@ $channel-width: 3rem;
 }
 
 .MessageBar {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     padding: 0.5rem;
     background-color: #7546a1;
     max-height: 50%;
@@ -159,6 +161,7 @@ $channel-width: 3rem;
     height: auto;
     background-color: none;
     color: white;
+    white-space: pre-line;
 
     &:hover {
         background-color: rgba(0,0,0,.10);

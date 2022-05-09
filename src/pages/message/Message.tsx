@@ -14,14 +14,11 @@ query GetMessages($authToken: Uuid!, $channelToken: Uuid!) {
       message,
       userId,
       channelId,
+      timestamp,
     }
   }
 }
 `
-
-export function Message(data: {text: string, id?:string}) {
-  return (<div className="Message" id={data.id}>{data.text}</div>)
-}
 
 type GetMessagesVars = {
   authToken: string,
@@ -30,7 +27,22 @@ type GetMessagesVars = {
 
 type GetMessagesData = {
   getChannel?: {
-    messages: Message[]
+    messages: MessageRaw[]
+  }
+}
+
+type MessageRaw = {
+  messageId: string,
+  message: string,
+  userId: string,
+  channelId: string,
+  timestamp: string,
+}
+
+function messageFromRaw(raw: MessageRaw): Message {
+  return {
+    ...raw,
+    timestamp: new Date(raw.timestamp),
   }
 }
 
@@ -39,6 +51,7 @@ type Message = {
   message: string,
   userId: string,
   channelId: string,
+  timestamp: Date,
 }
 
 const SEND_MESSAGE = gql`
@@ -57,6 +70,10 @@ type SendMessageData = {
   sendMessage?: string
 }
 
+export function Message(data: {message: Message}) {
+  return (<div className="Message" id={data.message.messageId}>{data.message.message}</div>)
+}
+
 export function MessagePage() {
   let pageRef: React.MutableRefObject<null | HTMLDivElement> = useRef(null);
   let [messages, setMessages] = useState<Message[]>([]);
@@ -73,7 +90,8 @@ export function MessagePage() {
       const {} = getMessages({
         onCompleted: (data) => {
           if (data.getChannel) {
-            setMessages(data.getChannel.messages);
+            let messages = data.getChannel.messages.map((raw) => {return messageFromRaw(raw);});
+            setMessages(messages);
           }
         }, 
         variables: {channelToken: channel, authToken: authData.authToken + ""} }
@@ -84,12 +102,13 @@ export function MessagePage() {
   let messageElements: JSX.Element | JSX.Element[] = [];
 
   if (loading) {
-    messageElements = <Message key="Loading" text="Loading" />
+    //messageElements = <Message key="Loading" text="Loading" />
   } else if (!channel) {
-    messageElements = <Message key="SelectMessage" text="Please Select a Channel" />
+    //messageElements = <Message key="SelectMessage" text="Please Select a Channel" />
   } else {
     messageElements = messages.map((message) => {
-      return (<Message key={message.messageId} text={message.message} />)
+      console.log(message.timestamp);
+      return (<Message key={message.messageId} message={message} />)
     });
   }
 
@@ -104,7 +123,6 @@ export function MessagePage() {
   }
 
   const onSumbit = (text: string) => {
-    alert(text);
     if (authData.authToken && channel && text.length > 0) {
       sendMessage({variables: {authToken: authData.authToken, channelToken: channel, message: text}})
     }
@@ -121,7 +139,7 @@ export function MessagePage() {
 
   return (
     <div className="MessagePage" ref={pageRef}>
-      <SideBar onClick={(id) => {setChannel(id)}} />
+      <SideBar setChannelToken={(id) => {setChannel(id)}} selectedChannelToken={channel} />
       <div className="MessageContent">
         <div className="MessageList">
           {messageElements}

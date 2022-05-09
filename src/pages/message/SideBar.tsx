@@ -26,7 +26,7 @@ export type Channel = {
   name: string,
 }
 
-type ChannelEntryData = {id?: string, backgroundImage?: string, selected?: boolean, onClick?: (event: React.MouseEvent<HTMLDivElement>, data: ChannelEntryData) => void};
+type ChannelEntryData = {id: string, backgroundImage?: string, selected?: boolean, onClick?: (event: React.MouseEvent<HTMLDivElement>, data: ChannelEntryData) => void};
 export function ChannelEntry(data: ChannelEntryData) {
   let className = (data.selected?.valueOf() === true)? "Selected" : "";
 
@@ -49,7 +49,7 @@ export function ChannelCreator(data: {id?: string, image?: string}) {
   )
 }
 
-export function SideBar(data: {onClick?: (id: string) => void}) {
+export function SideBar(data: {setChannelToken?: (token: string) => void, selectedChannelToken: string | undefined}) {
   const channelContext = useContext(ChannelContext);
   const authData = useContext(AuthContext);
   const {loading} = useQuery<GetChannelsData, GetChannelsVars>(GET_CHANNELS, 
@@ -79,21 +79,19 @@ export function SideBar(data: {onClick?: (id: string) => void}) {
   if (!loading && channelContext) {
     const {channels, setChannels} = channelContext;
 
-
     const onClick = (_event: React.MouseEvent, channelEntry: ChannelEntryData) => {
-      let newChannels: ChannelType = {};
+      let newChannels: ChannelType = {...channels};
 
-      Object.entries(channels).forEach(([keyStr, value]) => {
-        let key = parseInt(keyStr);
-        newChannels[key] = value;
-        newChannels[key].selected = keyStr === channelEntry.id;
-      })
+      if (data.selectedChannelToken) {
+        newChannels[data.selectedChannelToken].selected = false;
+      }
+      newChannels[channelEntry.id].selected = true;
 
       // calls a render to be queued
       setChannels(newChannels);
 
-      if (data.onClick) {
-        data.onClick(channelEntry.id + "");
+      if (data.setChannelToken) {
+        data.setChannelToken(channelEntry.id + "");
       }
     }
 

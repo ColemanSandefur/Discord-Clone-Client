@@ -1,6 +1,7 @@
 import {gql, useQuery} from '@apollo/client';
+import {Avatar, Tooltip} from '@mui/material';
 import {useContext} from 'react';
-import {AuthContext, ChannelContext, ChannelType} from '../../App';
+import {AuthContext, ChannelContext, ChannelHolder, ChannelType} from '../../App';
 import logo from "../../logo.svg"
 import plusIcon from "../../plus.svg"
 
@@ -26,9 +27,9 @@ export type Channel = {
   name: string,
 }
 
-type ChannelEntryData = {id: string, backgroundImage?: string, selected?: boolean, onClick?: (event: React.MouseEvent<HTMLDivElement>, data: ChannelEntryData) => void};
+type ChannelEntryData = {channel: ChannelType, backgroundImage?: string, onClick?: (event: React.MouseEvent<HTMLDivElement>, data: ChannelEntryData) => void};
 export function ChannelEntry(data: ChannelEntryData) {
-  let className = (data.selected?.valueOf() === true)? "Selected" : "";
+  let className = (data.channel.selected === true)? "Selected" : "";
 
   const onClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (data.onClick) {
@@ -37,15 +38,19 @@ export function ChannelEntry(data: ChannelEntryData) {
   }
 
   return (
-    <div onClick={onClick} className={"ChannelEntry" + ` ${className}`} id={data.id} style={{backgroundImage: `url(${(data.backgroundImage ? data.backgroundImage : logo)})`}}>
-    </div>
+    <Tooltip title={data.channel.name} placement="right" arrow>
+      <Avatar onClick={onClick} alt={data.channel.name} src={data.backgroundImage ? data.backgroundImage : logo} className={"ChannelEntry" + ` ${className}`}>
+      </Avatar>
+    </Tooltip>
   )
 }
 
 export function ChannelCreator(data: {id?: string, image?: string}) {
   return (
-    <div className="ChannelEntry CreateChannel" id={data.id} style={{backgroundImage: `url(${(data.image ? data.image : logo)})`}}>
-    </div>
+    <Tooltip title="Create Channel" placement="right" arrow>
+      <Avatar src={(data.image ? data.image : logo)} className="ChannelEntry CreateChannel">
+      </Avatar>
+    </Tooltip>
   )
 }
 
@@ -56,7 +61,7 @@ export function SideBar(data: {setChannelToken?: (token: string) => void, select
     {
       variables: {authToken: authData.authToken + ""}, 
       onCompleted: (data) => {
-        let newChannels: ChannelType = {};
+        let newChannels: ChannelHolder = {};
 
         data.channels.forEach((channel) => {
           newChannels[channel.id] = {selected: false, ...channel};
@@ -80,23 +85,23 @@ export function SideBar(data: {setChannelToken?: (token: string) => void, select
     const {channels, setChannels} = channelContext;
 
     const onClick = (_event: React.MouseEvent, channelEntry: ChannelEntryData) => {
-      let newChannels: ChannelType = {...channels};
+      let newChannels: ChannelHolder = {...channels};
 
       if (data.selectedChannelToken) {
         newChannels[data.selectedChannelToken].selected = false;
       }
-      newChannels[channelEntry.id].selected = true;
+      newChannels[channelEntry.channel.id].selected = true;
 
       // calls a render to be queued
       setChannels(newChannels);
 
       if (data.setChannelToken) {
-        data.setChannelToken(channelEntry.id + "");
+        data.setChannelToken(channelEntry.channel.id + "");
       }
     }
 
     elements = Object.entries(channels).map(([key, value]) => {
-      return(<ChannelEntry key={"channel " + key}id={key + ""} selected={value.selected} onClick={onClick}/>);
+      return(<ChannelEntry key={"channel " + key} channel={value} onClick={onClick}/>);
     });
   }
 

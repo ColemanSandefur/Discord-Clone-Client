@@ -45,7 +45,7 @@ $channel-width: 3rem;
     100% {margin-left: .25rem;}
 }
 
-.ChannelEntry {
+.MuiAvatar-root.ChannelEntry {
     width: $channel-width;
     height: $channel-width;
     border-radius: $channel-width;
@@ -61,6 +61,10 @@ $channel-width: 3rem;
 
     &.CreateChannel {
         background-size: 50%;
+        img.MuiAvatar-img {
+            width: 50%;
+            height: 50%;
+        }
     }
 
     &:hover {
@@ -170,4 +174,8 @@ $channel-width: 3rem;
 
     padding: 0.5rem;
 
+}
+
+.MuiModal-root.MessageMenu .MuiList-padding {
+    padding: 2px;
 }

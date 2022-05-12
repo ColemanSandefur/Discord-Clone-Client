@@ -1,10 +1,15 @@
 import {gql, useLazyQuery, useMutation} from '@apollo/client';
+import {Alert, CircularProgress, MenuItem, MenuList} from '@mui/material';
 import React, {useContext, useEffect, useRef, useState} from 'react';
 import {isMobile} from 'react-device-detect';
 import {AuthContext} from '../../App';
 import "./Message.scss"
 import {SideBar} from './SideBar';
 import {TextBar} from './TextBar';
+import HoverMenu from "material-ui-popup-state/HoverMenu";
+import {bindHover, bindMenu, usePopupState} from "material-ui-popup-state/hooks";
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
+import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
 
 const GET_MESSAGES = gql`
 query GetMessages($authToken: Uuid!, $channelToken: Uuid!) {
@@ -70,8 +75,46 @@ type SendMessageData = {
   sendMessage?: string
 }
 
+const GET_SINGLE_MESSAGE = gql`
+query GetSingleMessage($authToken: Uuid!, $messageToken: Uuid!) {
+  getMessage(token: $authToken, messageId: $messageToken) {
+    messageId,
+    message,
+    userId,
+    channelId,
+    timestamp,
+  }
+}
+`
+
+type GetMessageVars = {
+  authToken: string,
+  messageToken: string,
+}
+
+type GetMessageData = {
+  getMessage?: MessageRaw,
+}
+
 export function Message(data: {message: Message}) {
-  return (<div className="Message" id={data.message.messageId}>{data.message.message}</div>)
+  const anchorEl = useRef<HTMLSpanElement | null>(null);
+  
+  const popupState = usePopupState({variant: "popover", popupId: "test"});
+  return (
+    <div className="Message" id={data.message.messageId}>
+      <span ref={anchorEl} style={{width: "100%", display: "inline-block"}} {...bindHover(popupState)}>{data.message.message}</span>
+      <HoverMenu className="MessageMenu" {...bindMenu(popupState)} anchorOrigin={{vertical: 'top', horizontal: 'right'}} transformOrigin={{vertical: 'bottom', horizontal: 'right'}}>
+        <MenuList className="MessageMenu" dense={true} style={{flexDirection: 'row', display: 'flex', padding: 0}}>
+          <MenuItem disableGutters={true}>
+              <EditRoundedIcon />
+          </MenuItem>
+          <MenuItem disableGutters={true}>
+              <DeleteRoundedIcon />
+          </MenuItem>
+        </MenuList>
+      </HoverMenu>
+    </div>
+  )
 }
 
 export function MessagePage() {
@@ -79,12 +122,33 @@ export function MessagePage() {
   let [messages, setMessages] = useState<Message[]>([]);
   let [channel, setChannel] = useState<string | undefined>(undefined);
   let authData = useContext(AuthContext);
+  
+  // called on channel load to get all messages in channel, see getMessage for post page load message gathering
   let [getMessages, {loading}] = useLazyQuery<GetMessagesData, GetMessagesVars>(
     GET_MESSAGES,
     {fetchPolicy: "no-cache"}
   );
-  let [sendMessage, {}] = useMutation<SendMessageData, SendMessageVars>(SEND_MESSAGE, {fetchPolicy: "no-cache"});
 
+  // called when a new message is sent to update the message list
+  let [getMessage, {}] = useLazyQuery<GetMessageData, GetMessageVars>(GET_SINGLE_MESSAGE, {fetchPolicy: "no-cache"});
+
+  // when a message is sent from sendMessage it will automatically fetch the message from the server and update the message list
+  // (you could update it locally without contacting the server but this is easier)
+  let [sendMessage, {}] = useMutation<SendMessageData, SendMessageVars>(SEND_MESSAGE, {fetchPolicy: "no-cache", onCompleted: (data) => {
+    if (data.sendMessage) {
+      let messageId = data.sendMessage;
+
+      getMessage({variables: {authToken: authData.authToken + "", messageToken: messageId}, onCompleted: (message_data) => {
+        if (message_data.getMessage) {
+          let new_messages = messages.slice();
+          new_messages.push(messageFromRaw(message_data.getMessage));
+          setMessages(new_messages);
+        }
+      }, onError: (error) => console.error(error)});
+    }
+  }});
+
+  // update message list when the focused channel changes
   useEffect(() => {
     if (channel) {
       const {} = getMessages({
@@ -99,15 +163,15 @@ export function MessagePage() {
     }
   }, [channel]);
 
+  // the content to be rendered
   let messageElements: JSX.Element | JSX.Element[] = [];
 
-  if (loading) {
-    //messageElements = <Message key="Loading" text="Loading" />
-  } else if (!channel) {
-    //messageElements = <Message key="SelectMessage" text="Please Select a Channel" />
+  if (!channel) {
+    messageElements = <Alert severity="info">Please select a channel</Alert>
+  } else if (loading) {
+    messageElements = <CircularProgress />
   } else {
     messageElements = messages.map((message) => {
-      console.log(message.timestamp);
       return (<Message key={message.messageId} message={message} />)
     });
   }
@@ -122,12 +186,14 @@ export function MessagePage() {
     }
   }
 
+  // given to textbar to send message to server
   const onSumbit = (text: string) => {
     if (authData.authToken && channel && text.length > 0) {
       sendMessage({variables: {authToken: authData.authToken, channelToken: channel, message: text}})
     }
   }
 
+  // set up listeners for resizing textbar
   useEffect(() => {
     window.addEventListener('resize', () => resize());
     window.addEventListener("load", () => resize());

@@ -5,16 +5,18 @@ import {MessagePage} from './pages/message/Message';
 import client from "./services/ApiClient";
 import {Channel} from "./pages/message/SideBar";
 
-export type ChannelType = {
-  [key: string]: Channel&{selected: boolean}
+export type ChannelHolder = {
+  [key: string]: ChannelType 
 };
+
+export type ChannelType = Channel&{selected: boolean};
 
 export type AuthData = {
   authToken?: string,
   loggedIn: boolean,
 };
 
-export const ChannelContext = createContext<{channels: ChannelType, setChannels: Dispatch<SetStateAction<ChannelType>>} | null>(null);
+export const ChannelContext = createContext<{channels: ChannelHolder, setChannels: Dispatch<SetStateAction<ChannelHolder>>} | null>(null);
 export const AuthContext = createContext<AuthData>({loggedIn: false});
 
 function App() {

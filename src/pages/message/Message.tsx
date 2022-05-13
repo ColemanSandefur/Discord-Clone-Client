@@ -1,5 +1,5 @@
 import {gql, useLazyQuery, useMutation} from '@apollo/client';
-import {Alert, CircularProgress, MenuItem, MenuList} from '@mui/material';
+import {Alert, Avatar, CircularProgress, MenuItem, MenuList} from '@mui/material';
 import React, {useContext, useEffect, useRef, useState} from 'react';
 import {isMobile} from 'react-device-detect';
 import {AuthContext} from '../../App';
@@ -10,6 +10,7 @@ import HoverMenu from "material-ui-popup-state/HoverMenu";
 import {bindHover, bindMenu, usePopupState} from "material-ui-popup-state/hooks";
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
+import {stringAvatar} from '../../services/Helper';
 
 const GET_MESSAGES = gql`
 query GetMessages($authToken: Uuid!, $channelToken: Uuid!) {
@@ -20,6 +21,9 @@ query GetMessages($authToken: Uuid!, $channelToken: Uuid!) {
       userId,
       channelId,
       timestamp,
+      author {
+        username
+      }
     }
   }
 }
@@ -42,6 +46,11 @@ type MessageRaw = {
   userId: string,
   channelId: string,
   timestamp: string,
+  author: Author
+}
+
+type Author = {
+  username: string
 }
 
 function messageFromRaw(raw: MessageRaw): Message {
@@ -57,6 +66,7 @@ type Message = {
   userId: string,
   channelId: string,
   timestamp: Date,
+  author: Author
 }
 
 const SEND_MESSAGE = gql`
@@ -83,6 +93,9 @@ query GetSingleMessage($authToken: Uuid!, $messageToken: Uuid!) {
     userId,
     channelId,
     timestamp,
+    author {
+      username
+    }
   }
 }
 `
@@ -97,12 +110,27 @@ type GetMessageData = {
 }
 
 export function Message(data: {message: Message}) {
-  const anchorEl = useRef<HTMLSpanElement | null>(null);
+  const anchorEl = useRef<HTMLDivElement | null>(null);
   
   const popupState = usePopupState({variant: "popover", popupId: "test"});
+
+  //let avatar = ;
+
+  const name = data.message.author.username; 
+  const has_avatar = false;
+
+  // set avatar to either an image, or a color
+  let content = (has_avatar) ? {src: "avatar link"} : stringAvatar(name);
+
   return (
-    <div className="Message" id={data.message.messageId}>
-      <span ref={anchorEl} style={{width: "100%", display: "inline-block"}} {...bindHover(popupState)}>{data.message.message}</span>
+    <div className="Message" id={data.message.messageId} {...bindHover(popupState)}>
+      <Avatar variant="circular" alt={name} {...content} className="avatar"></Avatar>
+      <div className="content" ref={anchorEl}>
+        <h1 className="username">{name}</h1>
+        <span className="message">
+          {data.message.message}
+        </span>
+      </div>
       <HoverMenu className="MessageMenu" {...bindMenu(popupState)} anchorOrigin={{vertical: 'top', horizontal: 'right'}} transformOrigin={{vertical: 'bottom', horizontal: 'right'}}>
         <MenuList className="MessageMenu" dense={true} style={{flexDirection: 'row', display: 'flex', padding: 0}}>
           <MenuItem disableGutters={true}>

@@ -1,5 +1,6 @@
 import {gql, useLazyQuery, useMutation} from '@apollo/client';
-import {Alert, Avatar, CircularProgress, MenuItem, MenuList} from '@mui/material';
+import {Alert, Avatar, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, MenuList, TextField} from '@mui/material';
+import Button from '@mui/material/Button';
 import React, {useContext, useEffect, useRef, useState} from 'react';
 import {isMobile} from 'react-device-detect';
 import {AuthContext} from '../../App';
@@ -109,12 +110,25 @@ type GetMessageData = {
   getMessage?: MessageRaw,
 }
 
+const SIGN_IN = gql`
+mutation SignIn($username: String!, $password: String!) {
+  signIn(username: $username, password: $password)
+}
+`
+
+type SignInVars = {
+  username: string,
+  password: string,
+}
+
+type SignInData = {
+  signIn?: string
+}
+
 export function Message(data: {message: Message}) {
   const anchorEl = useRef<HTMLDivElement | null>(null);
   
   const popupState = usePopupState({variant: "popover", popupId: "test"});
-
-  //let avatar = ;
 
   const name = data.message.author.username; 
   const has_avatar = false;
@@ -149,7 +163,7 @@ export function MessagePage() {
   let pageRef: React.MutableRefObject<null | HTMLDivElement> = useRef(null);
   let [messages, setMessages] = useState<Message[]>([]);
   let [channel, setChannel] = useState<string | undefined>(undefined);
-  let authData = useContext(AuthContext);
+  let {authData} = useContext(AuthContext)!;
   
   // called on channel load to get all messages in channel, see getMessage for post page load message gathering
   let [getMessages, {loading}] = useLazyQuery<GetMessagesData, GetMessagesVars>(
@@ -159,6 +173,7 @@ export function MessagePage() {
 
   // called when a new message is sent to update the message list
   let [getMessage, {}] = useLazyQuery<GetMessageData, GetMessageVars>(GET_SINGLE_MESSAGE, {fetchPolicy: "no-cache"});
+
 
   // when a message is sent from sendMessage it will automatically fetch the message from the server and update the message list
   // (you could update it locally without contacting the server but this is easier)
@@ -240,7 +255,52 @@ export function MessagePage() {
         </div>
 
         <TextBar onSubmit={onSumbit}/>
+
+        <SignInDialog open={!authData.loggedIn} />
       </div>
     </div>
+  )
+}
+
+export function SignInDialog(data: {open: boolean}) {
+  let {authData, setAuthData} = useContext(AuthContext)!;
+
+  let username = useRef<HTMLInputElement>(null);
+  let password = useRef<HTMLInputElement>(null);
+  let submitButton = useRef<HTMLButtonElement>(null);
+  let [failedLogin, setFailedLogin] = useState(false);
+
+  let [signIn, {}] = useMutation<SignInData, SignInVars>(SIGN_IN, {fetchPolicy: "no-cache", onCompleted: (data) => {
+    if (data.signIn) {
+      setAuthData({...authData, authToken: data.signIn, loggedIn: true})
+      setFailedLogin(false);
+    } else {
+      setFailedLogin(true);
+    }
+  }});
+
+  const handleSignIn = () => {
+    if (username.current && password.current) {
+      signIn({variables: {username: username.current.value, password: password.current.value}});
+    }
+  }
+
+  return (
+    <Dialog open={data.open}>
+      <DialogTitle>Sign In</DialogTitle>
+      <DialogContent>
+        {failedLogin &&
+          <Alert severity="error" style={{visibility: (failedLogin)? "visible" : "hidden"}}>Wrong username or password</Alert>
+        }
+        <form onSubmit={(event) => {event.preventDefault(); handleSignIn();}}>
+          <TextField inputRef={username} margin="dense" id="username" label="username" fullWidth />
+          <TextField inputRef={password} margin="dense" id="password" label="password" fullWidth type="password"/>
+          <input type="submit" style={{display: "none"}} />
+        </form>
+      </DialogContent>
+      <DialogActions>
+        <Button ref={submitButton} onClick={handleSignIn}>Sign In</Button>
+      </DialogActions>
+    </Dialog>
   )
 }

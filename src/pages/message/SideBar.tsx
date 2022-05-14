@@ -1,6 +1,6 @@
-import {gql, useQuery} from '@apollo/client';
+import {gql, useLazyQuery, useQuery} from '@apollo/client';
 import {Avatar, Tooltip} from '@mui/material';
-import {useContext} from 'react';
+import {useContext, useEffect} from 'react';
 import {AuthContext, ChannelContext, ChannelHolder, ChannelType} from '../../App';
 import logo from "../../logo.svg"
 import plusIcon from "../../plus.svg"
@@ -56,10 +56,9 @@ export function ChannelCreator(data: {id?: string, image?: string}) {
 
 export function SideBar(data: {setChannelToken?: (token: string) => void, selectedChannelToken: string | undefined}) {
   const channelContext = useContext(ChannelContext);
-  const authData = useContext(AuthContext);
-  const {loading} = useQuery<GetChannelsData, GetChannelsVars>(GET_CHANNELS, 
+  const {authData} = useContext(AuthContext)!;
+  const [getChannels, {loading}] = useLazyQuery<GetChannelsData, GetChannelsVars>(GET_CHANNELS, 
     {
-      variables: {authToken: authData.authToken + ""}, 
       onCompleted: (data) => {
         let newChannels: ChannelHolder = {};
 
@@ -74,9 +73,18 @@ export function SideBar(data: {setChannelToken?: (token: string) => void, select
       },
       onError: (error) => {
         console.log(error);
-      }
+      },
+      fetchPolicy: "no-cache"
     }
   );
+
+  useEffect(() => {
+    if (authData.authToken) {
+      getChannels({
+        variables: {authToken: authData.authToken}, 
+      });
+    }
+  }, [authData])
 
   let elements: JSX.Element[] = [];
 

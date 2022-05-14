@@ -17,15 +17,16 @@ export type AuthData = {
 };
 
 export const ChannelContext = createContext<{channels: ChannelHolder, setChannels: Dispatch<SetStateAction<ChannelHolder>>} | null>(null);
-export const AuthContext = createContext<AuthData>({loggedIn: false});
+export const AuthContext = createContext<{authData: AuthData, setAuthData: Dispatch<SetStateAction<AuthData>>} | null>(null);
 
 function App() {
   const [channels, setChannels] = useState({});
+  const [authData, setAuthData] = useState<AuthData>({loggedIn: false});
 
   return (
     <ApolloProvider client={client}>
       <ChannelContext.Provider value={{channels: channels, setChannels: setChannels}}>
-        <AuthContext.Provider value={{authToken: "92588CE8EA6948D89A99F40B025357CE", loggedIn:false}}>
+        <AuthContext.Provider value={{authData: authData, setAuthData: setAuthData}}>
           <MessagePage />
         </AuthContext.Provider>
       </ChannelContext.Provider>

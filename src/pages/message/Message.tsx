@@ -12,6 +12,11 @@ import {bindHover, bindMenu, usePopupState} from "material-ui-popup-state/hooks"
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteRoundedIcon from '@mui/icons-material/DeleteRounded';
 import {stringAvatar} from '../../services/Helper';
+import {Controller, SubmitHandler, useForm} from 'react-hook-form';
+
+type MessageHolder = {
+  [key: string]: Message
+}
 
 const GET_MESSAGES = gql`
 query GetMessages($authToken: Uuid!, $channelToken: Uuid!) {
@@ -125,6 +130,22 @@ type SignInData = {
   signIn?: string
 }
 
+const UPDATE_MESSAGE = gql`
+mutation UpdateMessage($token: String!, $messageToken: String!, $message: String!) {
+  updateMessage(token: $token, messageId: $messageToken, message:$message)
+}
+`
+
+type UpdateMessageVars = {
+  token: string,
+  messageToken: string,
+  message: string,
+}
+
+type UpdateMessageData = {
+  updateMessage?: MessageRaw,
+}
+
 export function Message(data: {message: Message}) {
   const anchorEl = useRef<HTMLDivElement | null>(null);
   
@@ -161,7 +182,9 @@ export function Message(data: {message: Message}) {
 
 export function MessagePage() {
   let pageRef: React.MutableRefObject<null | HTMLDivElement> = useRef(null);
-  let [messages, setMessages] = useState<Message[]>([]);
+  let [messageTokens, setMessageTokens] = useState<string[]>([]);
+  let [messages, setMessages] = useState<MessageHolder>({});
+
   let [channel, setChannel] = useState<string | undefined>(undefined);
   let {authData} = useContext(AuthContext)!;
   
@@ -174,6 +197,16 @@ export function MessagePage() {
   // called when a new message is sent to update the message list
   let [getMessage, {}] = useLazyQuery<GetMessageData, GetMessageVars>(GET_SINGLE_MESSAGE, {fetchPolicy: "no-cache"});
 
+  let [setMessage, {}] = useMutation<UpdateMessageData, UpdateMessageVars>(UPDATE_MESSAGE, {
+    fetchPolicy: "no-cache",
+    onCompleted: (data) => {
+      if (data.updateMessage) {
+        let message = messageFromRaw(data.updateMessage);
+
+        setMessages({...messages, [message.messageId]: message});
+      }
+    }
+  })
 
   // when a message is sent from sendMessage it will automatically fetch the message from the server and update the message list
   // (you could update it locally without contacting the server but this is easier)
@@ -183,9 +216,11 @@ export function MessagePage() {
 
       getMessage({variables: {authToken: authData.authToken + "", messageToken: messageId}, onCompleted: (message_data) => {
         if (message_data.getMessage) {
-          let new_messages = messages.slice();
-          new_messages.push(messageFromRaw(message_data.getMessage));
-          setMessages(new_messages);
+          let message = messageFromRaw(message_data.getMessage);
+          let new_messages = messageTokens.slice();
+          new_messages.push(message.messageId);
+          setMessages({...messages, [message.messageId]: message})
+          setMessageTokens(new_messages);
         }
       }, onError: (error) => console.error(error)});
     }
@@ -198,7 +233,15 @@ export function MessagePage() {
         onCompleted: (data) => {
           if (data.getChannel) {
             let messages = data.getChannel.messages.map((raw) => {return messageFromRaw(raw);});
-            setMessages(messages);
+            let messageIds = messages.map((message) => {return message.messageId;});
+            let messageMap: MessageHolder = {};
+
+            messages.forEach((message) => {
+              messageMap[message.messageId] = message;
+            });
+
+            setMessages(messageMap);
+            setMessageTokens(messageIds);
           }
         }, 
         variables: {channelToken: channel, authToken: authData.authToken + ""} }
@@ -214,8 +257,9 @@ export function MessagePage() {
   } else if (loading) {
     messageElements = <CircularProgress />
   } else {
-    messageElements = messages.map((message) => {
-      return (<Message key={message.messageId} message={message} />)
+    messageElements = messageTokens.map((messageId) => {
+      let message = messages[messageId];
+      return (<Message key={messageId} message={message} />)
     });
   }
 
@@ -262,45 +306,76 @@ export function MessagePage() {
   )
 }
 
+type Inputs = {
+  username: string,
+  password: string,
+}
+
 export function SignInDialog(data: {open: boolean}) {
   let {authData, setAuthData} = useContext(AuthContext)!;
+  const {handleSubmit, control} = useForm<Inputs>();
+  const onSubmit: SubmitHandler<Inputs> = (data) => {
+    signIn({variables: {username: data.username, password: data.password}});
+  };
 
-  let username = useRef<HTMLInputElement>(null);
-  let password = useRef<HTMLInputElement>(null);
-  let submitButton = useRef<HTMLButtonElement>(null);
+  // keep track if there was a failed login attempt so an alert can tell the user that they entered the wrong information
   let [failedLogin, setFailedLogin] = useState(false);
 
-  let [signIn, {}] = useMutation<SignInData, SignInVars>(SIGN_IN, {fetchPolicy: "no-cache", onCompleted: (data) => {
+  let [signIn, {loading}] = useMutation<SignInData, SignInVars>(SIGN_IN, {fetchPolicy: "no-cache", onCompleted: (data) => {
+    setFailedLogin(data.signIn === undefined)
     if (data.signIn) {
       setAuthData({...authData, authToken: data.signIn, loggedIn: true})
-      setFailedLogin(false);
-    } else {
-      setFailedLogin(true);
     }
   }});
 
-  const handleSignIn = () => {
-    if (username.current && password.current) {
-      signIn({variables: {username: username.current.value, password: password.current.value}});
-    }
-  }
+  let content;
 
-  return (
-    <Dialog open={data.open}>
-      <DialogTitle>Sign In</DialogTitle>
+  let title = <DialogTitle>Sign In</DialogTitle>;
+
+  if (loading) {
+    content = (
+      <DialogContent>
+        <CircularProgress />
+      </DialogContent>
+    )
+  } else {
+    content = [(
       <DialogContent>
         {failedLogin &&
           <Alert severity="error" style={{visibility: (failedLogin)? "visible" : "hidden"}}>Wrong username or password</Alert>
         }
-        <form onSubmit={(event) => {event.preventDefault(); handleSignIn();}}>
-          <TextField inputRef={username} margin="dense" id="username" label="username" fullWidth />
-          <TextField inputRef={password} margin="dense" id="password" label="password" fullWidth type="password"/>
+        <form onSubmit={handleSubmit(onSubmit)}>
+          <Controller
+            name="username"
+            control={control}
+            defaultValue={""}
+            rules={{required: true}}
+            render={({field}) => 
+              <TextField {...field} inputRef={field.ref} margin="dense" fullWidth label={field.name} required/>} 
+          />
+
+          <Controller
+            name="password"
+            control={control}
+            defaultValue={""}
+            rules={{required: true}}
+            render={({field}) => 
+              <TextField {...field} inputRef={field.ref} margin="dense" fullWidth label={field.name} type="password" required />} 
+          />
           <input type="submit" style={{display: "none"}} />
         </form>
       </DialogContent>
+    ),(
       <DialogActions>
-        <Button ref={submitButton} onClick={handleSignIn}>Sign In</Button>
+        <Button onClick={handleSubmit(onSubmit)}>Sign In</Button>
       </DialogActions>
+    )];
+  }
+
+  return (
+    <Dialog open={data.open} fullWidth>
+      <DialogTitle>Sign In</DialogTitle>
+      {content}
     </Dialog>
   )
 }

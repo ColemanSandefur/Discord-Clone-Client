@@ -77,7 +77,16 @@ type Message = {
 
 const SEND_MESSAGE = gql`
 mutation SendMessage($authToken: Uuid!, $channelToken: Uuid!, $message: String!) {
-  sendMessage(token: $authToken, channelId: $channelToken, message: $message)
+  sendMessage(token: $authToken, channelId: $channelToken, message: $message) {
+    messageId,
+    message,
+    userId,
+    channelId,
+    timestamp,
+    author {
+      username
+    }
+  }
 }
 `
 
@@ -88,7 +97,7 @@ type SendMessageVars = {
 };
 
 type SendMessageData = {
-  sendMessage?: string
+  sendMessage?: MessageRaw
 }
 
 const GET_SINGLE_MESSAGE = gql`
@@ -131,7 +140,7 @@ type SignInData = {
 }
 
 const UPDATE_MESSAGE = gql`
-mutation UpdateMessage($token: String!, $messageToken: String!, $message: String!) {
+mutation UpdateMessage($token: Uuid!, $messageToken: Uuid!, $message: String!) {
   updateMessage(token: $token, messageId: $messageToken, message:$message)
 }
 `
@@ -146,7 +155,22 @@ type UpdateMessageData = {
   updateMessage?: MessageRaw,
 }
 
-export function Message(data: {message: Message}) {
+const DELETE_MESSAGE = gql`
+mutation DeleteMessage($token: Uuid!, $messageToken: Uuid!) {
+  deleteMessage(token: $token, messageId: $messageToken)
+}
+`
+
+type DeleteMessageVars = {
+  token: string,
+  messageToken: string,
+}
+
+type DeleteMessageData = {
+  deleteMessage?: string
+}
+
+export function Message(data: {message: Message, handlers?: {onDelete?: (messageId: string) => void}}) {
   const anchorEl = useRef<HTMLDivElement | null>(null);
   
   const popupState = usePopupState({variant: "popover", popupId: "test"});
@@ -171,7 +195,7 @@ export function Message(data: {message: Message}) {
           <MenuItem disableGutters={true}>
               <EditRoundedIcon />
           </MenuItem>
-          <MenuItem disableGutters={true}>
+          <MenuItem disableGutters={true} onClick={() => {data.handlers?.onDelete?.(data.message.messageId);}}>
               <DeleteRoundedIcon />
           </MenuItem>
         </MenuList>
@@ -182,8 +206,19 @@ export function Message(data: {message: Message}) {
 
 export function MessagePage() {
   let pageRef: React.MutableRefObject<null | HTMLDivElement> = useRef(null);
-  let [messageTokens, setMessageTokens] = useState<string[]>([]);
-  let [messages, setMessages] = useState<MessageHolder>({});
+  let [messages, setMessages] = useState<{messages: MessageHolder, tokens: string[]}>({messages: {}, tokens: []});
+
+  // Hold the rendered elements
+  let [messageElements, setMessageElements] = useState<JSX.Element[]>([]);
+  useEffect(() => {
+    setMessageElements(messages.tokens.map((messageId) => {
+      if (messages.messages[messageId]) {
+        let message = messages.messages[messageId];
+        return (<Message key={messageId} message={message} handlers={{onDelete:(messageToken) => {deleteMessage({variables: {token: authData.authToken + "", messageToken: messageToken}});}}}/>)
+      }
+      return <div key={messageId}></div>;
+    }));
+  }, [messages])
 
   let [channel, setChannel] = useState<string | undefined>(undefined);
   let {authData} = useContext(AuthContext)!;
@@ -197,13 +232,13 @@ export function MessagePage() {
   // called when a new message is sent to update the message list
   let [getMessage, {}] = useLazyQuery<GetMessageData, GetMessageVars>(GET_SINGLE_MESSAGE, {fetchPolicy: "no-cache"});
 
-  let [setMessage, {}] = useMutation<UpdateMessageData, UpdateMessageVars>(UPDATE_MESSAGE, {
+  let [updateMessage, {}] = useMutation<UpdateMessageData, UpdateMessageVars>(UPDATE_MESSAGE, {
     fetchPolicy: "no-cache",
     onCompleted: (data) => {
       if (data.updateMessage) {
         let message = messageFromRaw(data.updateMessage);
 
-        setMessages({...messages, [message.messageId]: message});
+        setMessages({tokens: messages.tokens, messages: {...messages.messages, [message.messageId]: message}});
       }
     }
   })
@@ -212,19 +247,36 @@ export function MessagePage() {
   // (you could update it locally without contacting the server but this is easier)
   let [sendMessage, {}] = useMutation<SendMessageData, SendMessageVars>(SEND_MESSAGE, {fetchPolicy: "no-cache", onCompleted: (data) => {
     if (data.sendMessage) {
-      let messageId = data.sendMessage;
+      let messageRaw = data.sendMessage;
+      let message = messageFromRaw(messageRaw);
 
-      getMessage({variables: {authToken: authData.authToken + "", messageToken: messageId}, onCompleted: (message_data) => {
-        if (message_data.getMessage) {
-          let message = messageFromRaw(message_data.getMessage);
-          let new_messages = messageTokens.slice();
-          new_messages.push(message.messageId);
-          setMessages({...messages, [message.messageId]: message})
-          setMessageTokens(new_messages);
-        }
-      }, onError: (error) => console.error(error)});
+      let newMessageTokens = messages.tokens.slice();
+      newMessageTokens.push(message.messageId);
+      setMessages({
+        tokens: newMessageTokens,
+        messages: {...messages.messages, [message.messageId]: message},
+      });
     }
   }});
+
+  let [deleteMessage, {}] = useMutation<DeleteMessageData, DeleteMessageVars>(DELETE_MESSAGE, {fetchPolicy: "no-cache", onCompleted: (data) => {
+    if (data.deleteMessage) {
+      let deletedMessageToken = data.deleteMessage;
+
+      let newMessageTokens = messages.tokens.slice();
+      let index = newMessageTokens.indexOf(deletedMessageToken);
+      if (index > -1) {
+        newMessageTokens.splice(index, 1);
+      }
+
+      let newMessages = {...messages.messages};
+      delete newMessages[deletedMessageToken];
+      setMessages({
+        tokens: newMessageTokens,
+        messages: newMessages,
+      });
+    }
+  }})
 
   // update message list when the focused channel changes
   useEffect(() => {
@@ -232,16 +284,18 @@ export function MessagePage() {
       const {} = getMessages({
         onCompleted: (data) => {
           if (data.getChannel) {
-            let messages = data.getChannel.messages.map((raw) => {return messageFromRaw(raw);});
-            let messageIds = messages.map((message) => {return message.messageId;});
+            let newMessages = data.getChannel.messages.map((raw) => {return messageFromRaw(raw);});
+            let messageTokens = newMessages.map((message) => {return message.messageId;});
             let messageMap: MessageHolder = {};
 
-            messages.forEach((message) => {
+            newMessages.forEach((message) => {
               messageMap[message.messageId] = message;
             });
-
-            setMessages(messageMap);
-            setMessageTokens(messageIds);
+            
+            setMessages({
+              tokens: messageTokens,
+              messages: messageMap,
+            });
           }
         }, 
         variables: {channelToken: channel, authToken: authData.authToken + ""} }
@@ -250,18 +304,13 @@ export function MessagePage() {
   }, [channel]);
 
   // the content to be rendered
-  let messageElements: JSX.Element | JSX.Element[] = [];
+  let pageContent: JSX.Element | JSX.Element[] = messageElements;
 
   if (!channel) {
-    messageElements = <Alert severity="info">Please select a channel</Alert>
+    pageContent = <Alert severity="info">Please select a channel</Alert>
   } else if (loading) {
-    messageElements = <CircularProgress />
-  } else {
-    messageElements = messageTokens.map((messageId) => {
-      let message = messages[messageId];
-      return (<Message key={messageId} message={message} />)
-    });
-  }
+    pageContent = <CircularProgress />
+  } 
 
   // a dumb workaround for mobile users
   const resize = () => {
@@ -295,7 +344,7 @@ export function MessagePage() {
       <SideBar setChannelToken={(id) => {setChannel(id)}} selectedChannelToken={channel} />
       <div className="MessageContent">
         <div className="MessageList">
-          {messageElements}
+          {pageContent}
         </div>
 
         <TextBar onSubmit={onSumbit}/>
@@ -330,8 +379,6 @@ export function SignInDialog(data: {open: boolean}) {
 
   let content;
 
-  let title = <DialogTitle>Sign In</DialogTitle>;
-
   if (loading) {
     content = (
       <DialogContent>
@@ -339,37 +386,38 @@ export function SignInDialog(data: {open: boolean}) {
       </DialogContent>
     )
   } else {
-    content = [(
-      <DialogContent>
-        {failedLogin &&
-          <Alert severity="error" style={{visibility: (failedLogin)? "visible" : "hidden"}}>Wrong username or password</Alert>
-        }
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <Controller
-            name="username"
-            control={control}
-            defaultValue={""}
-            rules={{required: true}}
-            render={({field}) => 
-              <TextField {...field} inputRef={field.ref} margin="dense" fullWidth label={field.name} required/>} 
-          />
+    content = (
+      <>
+        <DialogContent>
+          {failedLogin &&
+            <Alert severity="error" style={{visibility: (failedLogin)? "visible" : "hidden"}}>Wrong username or password</Alert>
+          }
+          <form onSubmit={handleSubmit(onSubmit)}>
+            <Controller
+              name="username"
+              control={control}
+              defaultValue={""}
+              rules={{required: true}}
+              render={({field}) => 
+                <TextField {...field} inputRef={field.ref} margin="dense" fullWidth label={field.name} required/>} 
+            />
 
-          <Controller
-            name="password"
-            control={control}
-            defaultValue={""}
-            rules={{required: true}}
-            render={({field}) => 
-              <TextField {...field} inputRef={field.ref} margin="dense" fullWidth label={field.name} type="password" required />} 
-          />
-          <input type="submit" style={{display: "none"}} />
-        </form>
-      </DialogContent>
-    ),(
-      <DialogActions>
-        <Button onClick={handleSubmit(onSubmit)}>Sign In</Button>
-      </DialogActions>
-    )];
+            <Controller
+              name="password"
+              control={control}
+              defaultValue={""}
+              rules={{required: true}}
+              render={({field}) => 
+                <TextField {...field} inputRef={field.ref} margin="dense" fullWidth label={field.name} type="password" required />} 
+            />
+            <input type="submit" style={{display: "none"}} />
+          </form>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleSubmit(onSubmit)}>Sign In</Button>
+        </DialogActions>
+      </>
+    );
   }
 
   return (

@@ -281,7 +281,10 @@ export function MessagePage() {
   // update message list when the focused channel changes
   useEffect(() => {
     if (channel) {
-      const {} = getMessages({
+      // clear all messages and then query for new ones
+      setMessages({messages: {}, tokens: []});
+
+      getMessages({
         onCompleted: (data) => {
           if (data.getChannel) {
             let newMessages = data.getChannel.messages.map((raw) => {return messageFromRaw(raw);});

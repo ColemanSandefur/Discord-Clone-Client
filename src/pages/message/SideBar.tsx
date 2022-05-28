@@ -4,6 +4,7 @@ import {useContext, useEffect} from 'react';
 import {AuthContext, ChannelContext, ChannelHolder, ChannelType} from '../../App';
 import logo from "../../logo.svg"
 import plusIcon from "../../plus.svg"
+import {ChannelCreator} from './CreateChannel';
 
 const GET_CHANNELS = gql`
 query GetChannels($authToken: Uuid!) {
@@ -45,14 +46,6 @@ export function ChannelEntry(data: ChannelEntryData) {
   )
 }
 
-export function ChannelCreator(data: {id?: string, image?: string}) {
-  return (
-    <Tooltip title="Create Channel" placement="right" arrow>
-      <Avatar src={(data.image ? data.image : logo)} className="ChannelEntry CreateChannel">
-      </Avatar>
-    </Tooltip>
-  )
-}
 
 export function SideBar(data: {setChannelToken?: (token: string) => void, selectedChannelToken: string | undefined}) {
   const channelContext = useContext(ChannelContext);
@@ -113,7 +106,7 @@ export function SideBar(data: {setChannelToken?: (token: string) => void, select
     });
   }
 
-  elements.push(<ChannelCreator key={"channel addition"}image={plusIcon} />);
+  elements.push(<ChannelCreator key={"channel creator"}/>);
 
   return (
     <div className="SideBar">

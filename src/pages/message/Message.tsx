@@ -97,7 +97,7 @@ type SendMessageVars = {
 };
 
 type SendMessageData = {
-  sendMessage?: MessageRaw
+  sendMessage: MessageRaw
 }
 
 const GET_SINGLE_MESSAGE = gql`
@@ -136,7 +136,7 @@ type SignInVars = {
 }
 
 type SignInData = {
-  signIn?: string
+  signIn: string
 }
 
 const UPDATE_MESSAGE = gql`
@@ -152,7 +152,7 @@ type UpdateMessageVars = {
 }
 
 type UpdateMessageData = {
-  updateMessage?: MessageRaw,
+  updateMessage: MessageRaw,
 }
 
 const DELETE_MESSAGE = gql`
@@ -167,7 +167,7 @@ type DeleteMessageVars = {
 }
 
 type DeleteMessageData = {
-  deleteMessage?: string
+  deleteMessage: string
 }
 
 export function Message(data: {message: Message, handlers?: {onDelete?: (messageId: string) => void}}) {
@@ -235,48 +235,42 @@ export function MessagePage() {
   let [updateMessage, {}] = useMutation<UpdateMessageData, UpdateMessageVars>(UPDATE_MESSAGE, {
     fetchPolicy: "no-cache",
     onCompleted: (data) => {
-      if (data.updateMessage) {
-        let message = messageFromRaw(data.updateMessage);
+      let message = messageFromRaw(data.updateMessage);
 
-        setMessages({tokens: messages.tokens, messages: {...messages.messages, [message.messageId]: message}});
-      }
+      setMessages({tokens: messages.tokens, messages: {...messages.messages, [message.messageId]: message}});
     }
   })
 
   // when a message is sent from sendMessage it will automatically fetch the message from the server and update the message list
   // (you could update it locally without contacting the server but this is easier)
   let [sendMessage, {}] = useMutation<SendMessageData, SendMessageVars>(SEND_MESSAGE, {fetchPolicy: "no-cache", onCompleted: (data) => {
-    if (data.sendMessage) {
-      let messageRaw = data.sendMessage;
-      let message = messageFromRaw(messageRaw);
+    let messageRaw = data.sendMessage;
+    let message = messageFromRaw(messageRaw);
 
-      let newMessageTokens = messages.tokens.slice();
-      newMessageTokens.push(message.messageId);
-      setMessages({
-        tokens: newMessageTokens,
-        messages: {...messages.messages, [message.messageId]: message},
-      });
-    }
+    let newMessageTokens = messages.tokens.slice();
+    newMessageTokens.push(message.messageId);
+    setMessages({
+      tokens: newMessageTokens,
+      messages: {...messages.messages, [message.messageId]: message},
+    });
   }});
 
-  let [deleteMessage, {}] = useMutation<DeleteMessageData, DeleteMessageVars>(DELETE_MESSAGE, {fetchPolicy: "no-cache", onCompleted: (data) => {
-    if (data.deleteMessage) {
-      let deletedMessageToken = data.deleteMessage;
+  let [deleteMessage, {}] = useMutation<DeleteMessageData, DeleteMessageVars>(DELETE_MESSAGE, {fetchPolicy: "no-cache", onError: (err) => {console.log(err);}, onCompleted: (data) => {
+    let deletedMessageToken = data.deleteMessage;
 
-      let newMessageTokens = messages.tokens.slice();
-      let index = newMessageTokens.indexOf(deletedMessageToken);
-      if (index > -1) {
-        newMessageTokens.splice(index, 1);
-      }
-
-      let newMessages = {...messages.messages};
-      delete newMessages[deletedMessageToken];
-      setMessages({
-        tokens: newMessageTokens,
-        messages: newMessages,
-      });
+    let newMessageTokens = messages.tokens.slice();
+    let index = newMessageTokens.indexOf(deletedMessageToken);
+    if (index > -1) {
+      newMessageTokens.splice(index, 1);
     }
-  }})
+
+    let newMessages = {...messages.messages};
+    delete newMessages[deletedMessageToken];
+    setMessages({
+      tokens: newMessageTokens,
+      messages: newMessages,
+    });
+  }});
 
   // update message list when the focused channel changes
   useEffect(() => {
@@ -373,11 +367,11 @@ export function SignInDialog(data: {open: boolean}) {
   // keep track if there was a failed login attempt so an alert can tell the user that they entered the wrong information
   let [failedLogin, setFailedLogin] = useState(false);
 
-  let [signIn, {loading}] = useMutation<SignInData, SignInVars>(SIGN_IN, {fetchPolicy: "no-cache", onCompleted: (data) => {
-    setFailedLogin(data.signIn === undefined)
-    if (data.signIn) {
-      setAuthData({...authData, authToken: data.signIn, loggedIn: true})
-    }
+  let [signIn, {loading}] = useMutation<SignInData, SignInVars>(SIGN_IN, {fetchPolicy: "no-cache", onError: (err) => {
+    setFailedLogin(true);
+  }, onCompleted: (data) => {
+    setFailedLogin(false);
+    setAuthData({...authData, authToken: data.signIn, loggedIn: true})
   }});
 
   let content;
